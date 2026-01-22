@@ -1,14 +1,15 @@
 --extra-index-url https://download.pytorch.org/whl/cpu
 streamlit
 crewai==1.8.1
-elasticsearch==9.2.1
-fpdf2==2.8.5
+langchain-groq
+elasticsearch
+fpdf2
 langchain
 langchain_community
 numpy
 pgvector
 psycopg2-binary
 python-dotenv
-sentence-transformers
+sentence_transformers
 torch
 urllib3
