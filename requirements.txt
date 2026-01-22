@@ -9,5 +9,6 @@ psycopg2==2.9.10
 psycopg2_binary==2.9.11
 python-dotenv==1.2.1
 sentence_transformers==5.0.0
-torch==2.7.1+cu118
+torch --index-url https://download.pytorch.org/whl/cpu
 urllib3==2.6.3
+
