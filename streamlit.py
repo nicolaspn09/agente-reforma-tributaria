@@ -90,8 +90,7 @@ user_query = st.text_area("Descreva o cenário tributário ou produto:",
 if st.button("Executar Análise Autônoma"):
     if user_query:
         with st.spinner("Analisando intenção, estados e legislação..."):
-            # Inicialização explícita para evitar erro de validação (Pydantic fix)
-            llm_consultor = ChatGroq(
+            llm_instanciado = ChatGroq(
                 model="llama-3.3-70b-versatile",
                 temperature=0,
                 groq_api_key=os.environ["GROQ_API_KEY"]
@@ -100,12 +99,13 @@ if st.button("Executar Análise Autônoma"):
             agente_independente = Agent(
                 role='Consultor Tributário Master',
                 goal='Analisar impactos da LCP 214/2025, diferenciando itens essenciais de supérfluos.',
-                backstory="""Especialista em Seletividade Fiscal. Você identifica automaticamente 
-                se o item sofrerá Imposto Seletivo ou se terá Alíquota Zero (Art. 120). 
+                backstory="""Especialista em Seletividade Fiscal. Você identifica se um produto 
+                sofrerá o Imposto Seletivo ou se terá Alíquota Zero (Art. 120). 
                 Você cruza a matriz de ICMS da VPS com o novo IVA Dual.""",
                 tools=[ConsultorTools.consultar_base_conhecimento, ConsultorTools.pesquisar_atualidades_web],
-                llm=llm_consultor, # Passando o objeto instanciado
+                llm=llm_instanciado,
                 verbose=True,
+                memory=True,
                 allow_delegation=False
             )
 
