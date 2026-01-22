@@ -110,12 +110,19 @@ if st.button("Executar Análise Autônoma"):
             )
 
             task = Task(
-                description=f"""Analise a solicitação: '{user_query}'.
-                1. Identifique o produto e os estados de ORIGEM e DESTINO.
-                2. Verifique se o item é ESSENCIAL (Art. 120 - Alíquota Zero) ou SUPÉRFLUO (Art. 393 - Imposto Seletivo).
-                3. Compare o ICMS interestadual atual (baseado na matriz da VPS) com o novo IVA Dual de 26,5%.
-                4. Explique o benefício do crédito pleno no destino conforme o Art. 121.""",
-                expected_output="Parecer técnico com Tabela Comparativa (Origem vs Destino) e Veredito de Seletividade.",
+                description=f"""Analise tecnicamente a solicitação: '{user_query}'.
+    
+                ESTRATÉGIA DE BUSCA:
+                1. Se não encontrar o termo exato do produto na VPS, pesquise pela CATEGORIA (ex: 'higiene pessoal', 'alimentos', 'medicamentos').
+                2. Identifique na Matriz de ICMS da VPS a alíquota de SC para SP (geralmente 12%).
+                3. Na LCP 214/2025, verifique o Art. 115 (Redução de 60% para higiene pessoal). 
+                4. Se o item não tiver redução nem alíquota zero, aplique a Alíquota Padrão estimada de 26,5%.
+                5. Compare o 'Custo Brasil' atual (ICMS + substituição tributária) com a simplicidade do IVA Dual.""",
+                expected_output="""Um parecer técnico estruturado com:
+                - Diagnóstico: Produto e Operação Interestadual.
+                - Comparativo: Alíquota Interestadual Atual (Matriz) vs Novo IVA Dual.
+                - Veredito de Categoria: Enquadramento no Art. 115 (Higiene Pessoal).
+                - Visão Estratégica: Impacto no fluxo de caixa (Art. 121 - Créditos).""",
                 agent=agente_independente
             )
 
