@@ -1,15 +1,13 @@
 --extra-index-url https://download.pytorch.org/whl/cpu
 streamlit
-crewai==1.8.1
+crewai==0.28.8
 langchain-groq
+langchain-community
 elasticsearch
 fpdf2
-langchain
-langchain_community
-numpy
 pgvector
 psycopg2-binary
 python-dotenv
-sentence_transformers
+sentence-transformers
 torch
 urllib3
