@@ -9,6 +9,7 @@ from sentence_transformers import SentenceTransformer
 from langchain_community.tools.tavily_search import TavilySearchResults
 import urllib3
 import torch
+from langchain_groq import ChatGroq
 from fpdf import FPDF
 from dotenv import load_dotenv, find_dotenv
 
@@ -89,31 +90,32 @@ user_query = st.text_area("Descreva o cenário tributário ou produto:",
 if st.button("Executar Análise Autônoma"):
     if user_query:
         with st.spinner("Analisando intenção, estados e legislação..."):
+            # Inicialização explícita para evitar erro de validação (Pydantic fix)
+            llm_consultor = ChatGroq(
+                model="llama-3.3-70b-versatile",
+                temperature=0,
+                groq_api_key=os.environ["GROQ_API_KEY"]
+            )
+
             agente_independente = Agent(
                 role='Consultor Tributário Master',
-                goal='Analisar cenários tributários complexos, identificando automaticamente estados, produtos e o impacto da LCP 214/2025.',
-                backstory="""Você é um especialista em planejamento tributário nacional. 
-                Sua missão é traduzir a complexidade do ICMS atual para o novo IVA Dual. 
-                Você identifica estados (UFs) e produtos no texto. Se um produto for supérfluo, 
-                você alerta sobre o Imposto Seletivo e as alíquotas majoradas no sistema antigo.""",
+                goal='Analisar impactos da LCP 214/2025, diferenciando itens essenciais de supérfluos.',
+                backstory="""Especialista em Seletividade Fiscal. Você identifica automaticamente 
+                se o item sofrerá Imposto Seletivo ou se terá Alíquota Zero (Art. 120). 
+                Você cruza a matriz de ICMS da VPS com o novo IVA Dual.""",
                 tools=[ConsultorTools.consultar_base_conhecimento, ConsultorTools.pesquisar_atualidades_web],
-                llm="groq/llama-3.3-70b-versatile",
-                verbose=True
+                llm=llm_consultor, # Passando o objeto instanciado
+                verbose=True,
+                allow_delegation=False
             )
 
             task = Task(
                 description=f"""Analise a solicitação: '{user_query}'.
-                1. Identifique o produto e os estados de ORIGEM e DESTINO mencionados.
-                2. Consulte na base da VPS a alíquota interestadual e interna (ICMS) para este trajeto.
-                3. Determine se o item é SUPÉRFLUO (sujeito a Imposto Seletivo no novo sistema e alíquotas majoradas/FECOP no antigo).
-                4. Aplique as regras da LCP 214/2025: Redução de 60% (Art. 115) ou Alíquota Zero (Art. 120).
-                5. Compare a carga tributária total estimada atual vs a nova alíquota padrão de 26,5%.""",
-                expected_output="""Um parecer técnico detalhado com:
-                - Resumo da Operação (Produto e Estados)
-                - Análise de Seletividade (Supérfluo vs Essencial)
-                - Tabela Comparativa (Cenário Atual Interestadual vs Novo IVA Dual)
-                - Fundamentação na LCP 214/2025 e EC 132
-                - Visão sobre manutenção de créditos (Art. 121)""",
+                1. Identifique o produto e os estados de ORIGEM e DESTINO.
+                2. Verifique se o item é ESSENCIAL (Art. 120 - Alíquota Zero) ou SUPÉRFLUO (Art. 393 - Imposto Seletivo).
+                3. Compare o ICMS interestadual atual (baseado na matriz da VPS) com o novo IVA Dual de 26,5%.
+                4. Explique o benefício do crédito pleno no destino conforme o Art. 121.""",
+                expected_output="Parecer técnico com Tabela Comparativa (Origem vs Destino) e Veredito de Seletividade.",
                 agent=agente_independente
             )
 
