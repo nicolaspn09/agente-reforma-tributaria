@@ -106,6 +106,7 @@ if st.button("Executar Análise Autônoma"):
                 llm=llm_instanciado,
                 verbose=True,
                 memory=True,
+                max_iter=5,
                 allow_delegation=False
             )
 
