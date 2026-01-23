@@ -1,13 +1,16 @@
+import pandas as pd
 import psycopg2
 from pgvector.psycopg2 import register_vector
 from sentence_transformers import SentenceTransformer
 import uuid
 import os
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
 
-load_dotenv()
+# --- CONFIGURAÇÕES ---
+script_dir = os.path.dirname(os.path.abspath(__file__))
+load_dotenv(find_dotenv(os.path.join(script_dir, '.env')))
 
-# Conexão VPS (Porta 5433 conforme sua imagem do Easypanel)
+# Conexão com a VPS (Porta 5433 do pgvector)
 PG_CONN = psycopg2.connect(
     host=os.getenv("PG_HOST"),
     port=os.getenv("PG_PORT"),
@@ -16,35 +19,62 @@ PG_CONN = psycopg2.connect(
     password=os.getenv("PG_PASSWORD")
 )
 register_vector(PG_CONN)
+
+# Modelo Multilíngue
 model = SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')
 
-def ingest_tax_facts():
-    # Baseado na imagem da matriz interestadual e regras de 2026
-    # Alíquotas interestaduais: 7% (Sul/Sudeste -> Norte/Nordeste/CO) ou 12% (Demais)
-    tax_facts = [
-        # REGRAS GERAIS INTERESTADUAIS
-        {"fact": "Operações interestaduais saindo de SP, RJ, MG, PR, RS, SC com destino a estados das regiões Norte, Nordeste, Centro-Oeste e ES possuem alíquota de 7%.", "tags": "interestadual, 7%"},
-        {"fact": "Operações interestaduais entre estados da mesma região ou saindo do N/NE/CO para o S/SE possuem alíquota de 12%.", "tags": "interestadual, 12%"},
-        {"fact": "Produtos importados ou com conteúdo de importação superior a 40% possuem alíquota interestadual unificada de 4% (Resolução 13/2012).", "tags": "importados, 4%"},
-        
-        # ALÍQUOTAS INTERNAS E SUPÉRFLUOS (EXEMPLOS)
-        {"fact": "Em Santa Catarina (SC), a alíquota interna padrão é 17%. Itens supérfluos como bebidas alcoólicas e tabaco possuem alíquota de 25%.", "uf": "SC"},
-        {"fact": "No Rio de Janeiro (RJ), a alíquota padrão é 20% (incluindo FECOP). Itens supérfluos podem chegar a 32%.", "uf": "RJ"},
-        {"fact": "Em São Paulo (SP), a alíquota interna é 18%. Operações com perfumes e cosméticos (supérfluos) possuem alíquota de 25%.", "uf": "SP"}
-    ]
+def ingest_matrix(file_path):
+    # 1. Carrega o CSV tratando o separador ';' e definindo a primeira coluna como índice
+    df = pd.read_csv(file_path, sep=';', index_col=0)
+    
+    # 2. LIMPEZA: Remove a coluna 'destino' e a linha 'origem' se existirem
+    if 'destino' in df.columns:
+        df = df.drop(columns=['destino'])
+    if 'origem' in df.index:
+        df = df.drop(index='origem')
 
+    print(f"🚀 Iniciando a injeção de {df.size} combinações de alíquotas na VPS...")
+    
+    contador = 0
     with PG_CONN.cursor() as cur:
-        for item in tax_facts:
-            content = item['fact']
-            embedding = model.encode(content).tolist()
-            metadata = {"tipo": "matriz_icms", "origem": "tabela_oficial", "contexto": "sistema_antigo"}
-            
-            cur.execute(
-                "INSERT INTO legal_vectors (id, content, embedding, metadata) VALUES (%s, %s, %s, %s)",
-                (str(uuid.uuid4()), content, embedding, str(metadata))
-            )
+        for origem, row in df.iterrows():
+            for destino, aliquota in row.items():
+                # Ignora valores vazios ou colunas de metadados
+                if pd.isna(aliquota):
+                    continue
+                
+                origem_uf = str(origem).upper()
+                destino_uf = str(destino).upper()
+                aliquota_fmt = f"{aliquota}%"
+
+                # 3. CRIAÇÃO DO FATO (Lógica Interna vs Interestadual)
+                if origem_uf == destino_uf:
+                    texto = f"A alíquota interna padrão de ICMS no estado de {origem_uf} é de {aliquota_fmt}."
+                else:
+                    texto = f"A alíquota interestadual de ICMS em operações saindo de {origem_uf} com destino a {destino_uf} é de {aliquota_fmt}."
+                
+                # Gerar o vetor e metadados
+                embedding = model.encode(texto).tolist()
+                metadata = {
+                    "tipo": "matriz_icms",
+                    "origem": origem_uf,
+                    "destino": destino_uf,
+                    "aliquota": aliquota_fmt
+                }
+                
+                # Inserção no Banco
+                cur.execute(
+                    "INSERT INTO legal_vectors (id, content, embedding, metadata) VALUES (%s, %s, %s, %s)",
+                    (str(uuid.uuid4()), texto, embedding, str(metadata))
+                )
+                contador += 1
+                
+                # Print de progresso a cada 100 registros
+                if contador % 100 == 0:
+                    print(f"📡 {contador} registros processados...")
+
     PG_CONN.commit()
-    print("✅ Matriz ICMS e Fatos de Supérfluos injetados na VPS!")
+    print(f"✅ Sucesso: {contador} alíquotas interestaduais integradas à inteligência do Agente!")
 
 if __name__ == "__main__":
-    ingest_tax_facts()
+    ingest_matrix(r"C:\Users\nicol\OneDrive\Cursos online\Treinamento Python - Hashtag\Códigos\Agente Reforma Tributária - Projeto\Alíquota interestadual - data-1769102722017.csv")
