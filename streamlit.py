@@ -122,7 +122,7 @@ if st.button("Gerar Parecer Autônomo"):
                 2. Extraia Origem/Destino e use a Ferramenta VPS para pegar a alíquota interestadual EXATA da matriz de ICMS.
                 3. Na LCP 214/2025, identifique o regime: Alíquota Zero, Redução ou Alíquota Padrão (26,5%).
                 4. Explique o conceito de Crédito Pleno (Art. 121) e o fim da cumulatividade no cenário descrito.""",
-                expected_output="Parecer Técnico com Diagnóstico, Tabela Comparativa Interestadual, Base Legal do Planalto e Visão Estratégica.",
+                expected_output="Parecer Técnico com Diagnóstico, Base Legal e Visão Estratégica.",
                 agent=agente_master
             )
 
