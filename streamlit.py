@@ -13,20 +13,20 @@ from langchain_groq import ChatGroq
 from fpdf import FPDF
 from dotenv import load_dotenv, find_dotenv
 
-# --- SETUP E CACHE ---
+# --- SETUP E CACHE DE MODELO ---
 script_dir = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(find_dotenv(os.path.join(script_dir, '.env')))
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 @st.cache_resource
 def load_ai_models():
-    # Forçar CPU se houver erro de Meta Tensor em ambientes específicos
+    # Evita erro de Meta Tensor forçando o dispositivo correto
     device = "cuda" if torch.cuda.is_available() else "cpu"
     return SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2', device=device)
 
 model = load_ai_models()
 
-# --- 1. CONEXÕES VPS ---
+# --- 1. CONEXÕES COM A VPS (BANCO DE DADOS SOBERANO) ---
 ES_CLIENT = Elasticsearch(
     os.getenv("ES_HOST"),
     basic_auth=(os.getenv("ES_USER"), os.getenv("ES_PASSWORD")),
@@ -36,104 +36,103 @@ ES_CLIENT = Elasticsearch(
 
 PG_CONN = psycopg2.connect(
     host=os.getenv("PG_HOST"),
-    port="5433", # Porta do pgvector
+    port="5433", # Porta específica do pgvector
     database=os.getenv("PG_DB_NAME"),
     user=os.getenv("PG_USER"),
     password=os.getenv("PG_PASSWORD")
 )
 register_vector(PG_CONN)
 
-# --- 2. FERRAMENTAS ESTRATÉGICAS ---
-class ConsultorTools:
-    @tool("consultar_base_conhecimento")
-    def consultar_base_conhecimento(query: str):
-        """Consulta a LCP 214/2025, EC 132 e a Matriz de ICMS (interestadual/interna) na VPS."""
+# --- 2. FERRAMENTAS ESTRATÉGICAS (TOOLS) ---
+class ConsultorMasterTools:
+    @tool("consultar_inteligencia_vps")
+    def consultar_inteligencia_vps(query: str):
+        """Consulta LCP 214/2025, EC 132 e Matriz ICMS interestadual. 
+        Mapeia automaticamente sinônimos como 'aluguel' para 'locação'."""
+        
+        # Guardrail de Sinônimos: Transforma termos comerciais em termos jurídicos
+        termos_map = {"aluguel": "locação de bens imóveis", "nota de débito": "reembolso", "software": "licenciamento de bens imateriais"}
+        for k, v in termos_map.items():
+            if k in query.lower(): query += f" {v}"
+
         query_vector = model.encode(query).tolist()
         with PG_CONN.cursor() as cur:
-            # Busca ampliada para capturar fatos da matriz e da lei
-            cur.execute("SELECT content, metadata FROM legal_vectors ORDER BY embedding <=> %s::vector LIMIT 6", (query_vector,))
-            pg_res = cur.fetchall()
+            # Busca ampliada para garantir que pegue a lei e a matriz interestadual
+            cur.execute("SELECT content FROM legal_vectors ORDER BY embedding <=> %s::vector LIMIT 10", (query_vector,))
+            res = cur.fetchall()
         
-        contexto = "### FATOS LEGAIS E TRIBUTÁRIOS (BASE VPS) ###\n"
-        for r in pg_res:
-            contexto += f"\n- {r[0]}"
-        return contexto
+        return "### CONHECIMENTO INTERNO (VPS) ###\n" + "\n".join([f"- {r[0]}" for r in res])
 
-    @tool("pesquisar_atualidades_web")
-    def pesquisar_atualidades_web(query: str):
-        """Busca notícias recentes e interpretações técnicas em portais especializados da reforma."""
-        search = TavilySearchResults(k=5, include_domains=["reformatributaria.com.br", "sefaz.gov.br", "portaltributario.com.br"])
+    @tool("pesquisar_planalto_e_governo")
+    def pesquisar_planalto_e_governo(query: str):
+        """Busca no site do Planalto, Portais da Fazenda e notícias oficiais da Reforma."""
+        search = TavilySearchResults(
+            k=5, 
+            include_domains=["planalto.gov.br", "reformatributaria.com.br", "sefaz.gov.br", "fazenda.gov.br"]
+        )
         return search.run(query)
 
-# --- 3. FUNÇÃO AUXILIAR PDF ---
-def gerar_pdf(texto, query_usuario):
+# --- 3. FUNÇÃO DE PARECER EM PDF ---
+def gerar_pdf(texto, query_origem):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", "B", 14)
-    pdf.cell(190, 10, "Parecer Tecnico - Auditoria Independente", ln=True, align='C')
+    pdf.cell(190, 10, "Parecer Tecnico - Consultoria Estrategica Reforma", ln=True, align='C')
     pdf.set_font("Arial", size=10)
     pdf.ln(5)
-    pdf.multi_cell(0, 7, f"Consulta: {query_usuario}")
+    pdf.multi_cell(0, 7, f"Analise solicitada: {query_origem}")
     pdf.ln(5)
-    # Limpeza básica de markdown para PDF
+    # Limpa markdown para o PDF não quebrar
     clean_text = texto.replace("#", "").replace("*", "").replace("|", "-")
     pdf.multi_cell(0, 7, clean_text.encode('latin-1', 'replace').decode('latin-1'))
     return bytes(pdf.output())
 
-# --- 4. INTERFACE STREAMLIT ---
-st.set_page_config(page_title="Agente Tributário", layout="wide", page_icon="⚖️")
+# --- 4. INTERFACE E LÓGICA DO AGENTE ---
+st.set_page_config(page_title="Consultor Reforma AI", layout="wide", page_icon="⚖️")
 st.title("⚖️ Agente Consultor Estratégico - Reforma Tributária")
+st.markdown("Analise qualquer operação (Bens, Serviços, Locações ou Direitos) comparando o sistema atual com a LCP 214/2025.")
 
-user_query = st.text_area("Descreva o cenário tributário ou produto:", 
-                          placeholder="Ex: Qual o impacto de vender desodorante de SP para SC? ou Explique o Imposto Seletivo para bebidas.")
+user_query = st.text_area("Descreva sua dúvida ou operação de negócio:", 
+                          placeholder="Ex: Impacto do aluguel comercial em SP | Venda de SC para RJ | Como funciona o cashback?")
 
-if st.button("Executar Análise Autônoma"):
+if st.button("Gerar Parecer Autônomo"):
     if user_query:
-        with st.spinner("Analisando intenção, estados e legislação..."):
-            llm_instanciado = ChatGroq(
-                model="llama-3.3-70b-versatile",
-                temperature=0,
-                groq_api_key=os.environ["GROQ_API_KEY"]
-            )
+        with st.spinner("O Agente está cruzando a Matriz Interestadual com a Legislação do Planalto..."):
+            
+            # Inicialização do Cérebro (Llama 3.3 via Groq)
+            llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0, groq_api_key=os.environ["GROQ_API_KEY"])
 
-            agente_independente = Agent(
-                role='Consultor Tributário Master',
-                goal='Analisar impactos da LCP 214/2025, diferenciando itens essenciais de supérfluos.',
-                backstory="""Especialista em Seletividade Fiscal. Você identifica se um produto 
-                sofrerá o Imposto Seletivo ou se terá Alíquota Zero (Art. 120). 
-                Você cruza a matriz de ICMS da VPS com o novo IVA Dual.""",
-                tools=[ConsultorTools.consultar_base_conhecimento, ConsultorTools.pesquisar_atualidades_web],
-                llm=llm_instanciado,
+            agente_master = Agent(
+                role='Consultor Tributário Sênior Master',
+                goal='Fornecer análises técnicas irrepreensíveis e estratégicas sobre a Reforma Tributária brasileira.',
+                backstory="""Você é a maior autoridade em planejamento tributário. 
+                Sua especialidade é o IVA Dual (IBS/CBS). Você nunca inventa dados. 
+                Se o usuário fala 'aluguel', você sabe que a lei trata como 'locação'. 
+                Você usa a matriz de ICMS na VPS para ser exato no sistema antigo.""",
+                tools=[ConsultorMasterTools.consultar_inteligencia_vps, ConsultorMasterTools.pesquisar_planalto_e_governo],
+                llm=llm,
                 verbose=True,
-                memory=True,
-                max_iter=5,
-                allow_delegation=False
+                max_iter=5, # Limite de reflexão para evitar loop
+                memory=True
             )
 
             task = Task(
-                description=f"""Analise tecnicamente a solicitação: '{user_query}'.
-    
-                ESTRATÉGIA DE BUSCA:
-                1. Se não encontrar o termo exato do produto na VPS, pesquise pela CATEGORIA (ex: 'higiene pessoal', 'alimentos', 'medicamentos').
-                2. Identifique na Matriz de ICMS da VPS a alíquota de SC para SP (geralmente 12%).
-                3. Na LCP 214/2025, verifique o Art. 115 (Redução de 60% para higiene pessoal). 
-                4. Se o item não tiver redução nem alíquota zero, aplique a Alíquota Padrão estimada de 26,5%.
-                5. Compare o 'Custo Brasil' atual (ICMS + substituição tributária) com a simplicidade do IVA Dual.""",
-                expected_output="""Um parecer técnico estruturado com:
-                - Diagnóstico: Produto e Operação Interestadual.
-                - Comparativo: Alíquota Interestadual Atual (Matriz) vs Novo IVA Dual.
-                - Veredito de Categoria: Enquadramento no Art. 115 (Higiene Pessoal).
-                - Visão Estratégica: Impacto no fluxo de caixa (Art. 121 - Créditos).""",
-                agent=agente_independente
+                description=f"""Analise tecnicamente: '{user_query}'.
+                1. Identifique o objeto: é um BEM, SERVIÇO, DIREITO ou LOCAÇÃO?
+                2. Extraia Origem/Destino e use a Ferramenta VPS para pegar a alíquota interestadual EXATA da matriz de ICMS.
+                3. Na LCP 214/2025, identifique o regime: Alíquota Zero, Redução ou Alíquota Padrão (26,5%).
+                4. Explique o conceito de Crédito Pleno (Art. 121) e o fim da cumulatividade no cenário descrito.""",
+                expected_output="Parecer Técnico com Diagnóstico, Tabela Comparativa Interestadual, Base Legal do Planalto e Visão Estratégica.",
+                agent=agente_master
             )
 
-            crew = Crew(agents=[agente_independente], tasks=[task])
+            crew = Crew(agents=[agente_master], tasks=[task])
             resultado = str(crew.kickoff())
             
-            st.session_state['resultado'] = resultado
+            st.session_state['res'] = resultado
             st.session_state['query'] = user_query
             st.markdown(resultado)
 
-if 'resultado' in st.session_state:
-    pdf_bytes = gerar_pdf(st.session_state['resultado'], st.session_state['query'])
-    st.download_button("📥 Baixar Parecer Técnico (PDF)", data=pdf_bytes, file_name="parecer_tributario.pdf", mime="application/pdf")
+if 'res' in st.session_state:
+    pdf_bytes = gerar_pdf(st.session_state['res'], st.session_state['query'])
+    st.download_button("📥 Baixar Parecer em PDF", data=pdf_bytes, file_name="parecer_tecnico_reforma.pdf", mime="application/pdf")
