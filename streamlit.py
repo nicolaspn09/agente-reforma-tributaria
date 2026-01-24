@@ -93,7 +93,7 @@ st.set_page_config(page_title="Consultor Reforma AI", layout="wide", page_icon="
 st.title("⚖️ Agente Consultor Estratégico - Reforma Tributária")
 
 user_query = st.text_area("Descreva sua dúvida ou operação de negócio:", 
-                          placeholder="Ex: Qual a alíquota de SP para MG?")
+                          placeholder="Ex: Qual o impacto da reforma tributária?")
 
 if st.button("Gerar Parecer Autônomo"):
     if user_query:
@@ -135,3 +135,4 @@ if st.button("Gerar Parecer Autônomo"):
 if 'res' in st.session_state:
     pdf_bytes = gerar_pdf(st.session_state['res'], st.session_state['query'])
     st.download_button("📥 Baixar Parecer em PDF", data=pdf_bytes, file_name="parecer_tributario.pdf", mime="application/pdf")
+
