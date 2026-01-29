@@ -125,5 +125,5 @@ def process_and_ingest(pdf_path, index_name="reforma_idx"):
 setup_database()
 
 # Execução inicial
-process_and_ingest(r"C:\Users\nicol\OneDrive\Cursos online\Treinamento Python - Hashtag\Códigos\Agente Reforma Tributária - Projeto\Legislação\Lcp 214.pdf")
-process_and_ingest(r"C:\Users\nicol\OneDrive\Cursos online\Treinamento Python - Hashtag\Códigos\Agente Reforma Tributária - Projeto\Legislação\Emenda Constitucional nº 132.pdf")
+process_and_ingest("Legislação\Lcp 214.pdf")
+process_and_ingest("Legislação\Emenda Constitucional nº 132.pdf")
